@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+osmnx
+networkx
+pandas
+scipy
+numpy

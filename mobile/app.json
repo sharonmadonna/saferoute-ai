@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "SafeRouteAI",
+    "slug": "saferoute-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "plugins": [
+      "@maplibre/maplibre-react-native"
+    ],
+    "android": {
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "ios": {
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SafeRoute needs your location to show the safest route."
+      }
+    }
+  }
+}
