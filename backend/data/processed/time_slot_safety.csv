@@ -1,0 +1,5 @@
+Time Bucket,Hours,Incident Count,Safety Score (1-10),Notes
+Early Morning,00:00-06:00,182,4,Highest risk period crime_dataset_india.csv
+Morning,06:01-12:00,156,7,Moderate safety crime_dataset_india.csv
+Afternoon,12:01-18:00,142,8,Safest for travel crime_dataset_india.csv
+Evening,18:01-23:59,168,5,Rising risk after dark crime_dataset_india.csv

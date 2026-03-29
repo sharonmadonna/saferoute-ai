@@ -1,0 +1,15 @@
+Place,Total_Crimes,Area,Total_Street_Lights,Working_Lights,Not_Working_Lights,Lighting_Efficiency,Crime_Score,Lighting_Score,Location_Safety_Score
+Adyar,128,Adyar,222890,177768,45122,79.76,0.7,3.99,4.69
+Anna Nagar,120,Anna Nagar,203493,161564,41929,79.4,1.63,3.97,5.6
+Chromepet,131,Chromepet,207898,168069,39829,80.84,0.35,4.04,4.39
+Guindy,130,Guindy,247828,197935,49893,79.87,0.47,3.99,4.46
+Kodambakkam,103,Kodambakkam,240037,192018,48019,80.0,3.6,4.0,7.6
+Mylapore,127,Mylapore,216259,172592,43667,79.81,0.81,3.99,4.8
+Nungambakkam,114,Nungambakkam,235772,189990,45782,80.58,2.33,4.03,6.36
+Perambur,127,Perambur,205802,168034,37768,81.65,0.81,4.08,4.89
+Porur,119,Porur,209683,169224,40459,80.7,1.74,4.04,5.78
+Royapettah,118,Royapettah,209286,166324,42962,79.47,1.86,3.97,5.83
+Sholinganallur,107,Sholinganallur,209626,168990,40636,80.62,3.14,4.03,7.17
+T Nagar,125,T Nagar,205505,164389,41116,79.99,1.05,4.0,5.05
+Tambaram,111,Tambaram,234488,185253,49235,79.0,2.67,3.95,6.62
+Velachery,106,Velachery,222433,178461,43972,80.23,3.26,4.01,7.27
