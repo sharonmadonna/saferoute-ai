@@ -9,6 +9,12 @@ from route_engine import RouteEngine
 from location_detector import LocationDetector, SimpleLocationProvider
 from datetime import datetime
 import json
+import os
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
 
 
 class SafeRouteAI:
@@ -38,11 +44,17 @@ class SafeRouteAI:
         print("=" * 60)
 
         try:
+            backend_dir = os.path.dirname(os.path.abspath(__file__))
+            processed_dir = os.path.join(backend_dir, 'data', 'processed')
+            raw_dir = os.path.join(backend_dir, 'data', 'raw')
+
             # Step 1: Check if processed data exists
-            import os
-            if not os.path.exists('data/processed/location_safety_scores.csv'):
+            location_scores_file = os.path.join(processed_dir, 'location_safety_scores.csv')
+            time_slot_file = os.path.join(processed_dir, 'time_slot_safety.csv')
+
+            if not os.path.exists(location_scores_file):
                 print("\n📊 Step 1: Preprocessing Raw Data...")
-                self.preprocessor = DataPreprocessor('data/raw')
+                self.preprocessor = DataPreprocessor(raw_dir)
                 if not self.preprocessor.process():
                     print("✗ Data preprocessing failed")
                     return False
@@ -52,7 +64,7 @@ class SafeRouteAI:
 
             # Step 2: Initialize safety scorer
             print("\n🎯 Step 2: Initializing Safety Scorer...")
-            self.safety_scorer = SafetyScorer()
+            self.safety_scorer = SafetyScorer(location_safety_path=location_scores_file, time_slots_path=time_slot_file)
             if self.safety_scorer.location_scores is None:
                 print("✗ Safety scorer initialization failed")
                 return False
@@ -575,3 +587,319 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# -----------------------------
+# FastAPI backend for frontend
+# -----------------------------
+
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+USERS_DB_PATH = os.path.join(BACKEND_DIR, 'data', 'processed', 'users.json')
+OTP_STORE = {}
+_APP_INSTANCE = None
+
+
+def _load_users_db():
+    os.makedirs(os.path.dirname(USERS_DB_PATH), exist_ok=True)
+    if not os.path.exists(USERS_DB_PATH):
+        with open(USERS_DB_PATH, 'w', encoding='utf-8') as f:
+            json.dump({'users': []}, f, indent=2)
+        return {'users': []}
+
+    try:
+        with open(USERS_DB_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if not isinstance(data, dict) or 'users' not in data:
+            return {'users': []}
+        return data
+    except Exception:
+        return {'users': []}
+
+
+def _save_users_db(data):
+    with open(USERS_DB_PATH, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+
+def _issue_token(email):
+    timestamp = int(datetime.now().timestamp())
+    return f"token-{email}-{timestamp}"
+
+
+def _get_app_instance():
+    global _APP_INSTANCE
+    if _APP_INSTANCE is None:
+        _APP_INSTANCE = SafeRouteAI()
+        if not _APP_INSTANCE.initialize():
+            raise RuntimeError('Failed to initialize SafeRouteAI core services')
+    return _APP_INSTANCE
+
+
+def _location_payload(row, include_coordinates=True):
+    payload = {
+        'name': row['location'],
+        'safety_score': row['safety_score'],
+        'total_crimes': row.get('total_crimes', 0),
+        'lighting_efficiency_percent': row.get('lighting_efficiency_percent', 0.0)
+    }
+    if include_coordinates:
+        coords = LocationDetector.LOCATION_COORDINATES.get(row['location'])
+        if coords:
+            payload['coordinates'] = {
+                'lat': coords[0],
+                'lng': coords[1]
+            }
+    return payload
+
+
+class SignupRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    newPassword: str
+
+
+app_api = FastAPI(title='SafeRoute AI API', version='1.0.0')
+
+app_api.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5174'
+    ],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*']
+)
+
+
+@app_api.get('/api/health')
+def health_check():
+    return {'status': 'ok', 'service': 'SafeRoute AI API'}
+
+
+@app_api.post('/api/auth/signup')
+def signup(payload: SignupRequest):
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail='Password must be at least 6 characters')
+
+    db = _load_users_db()
+    existing = next((u for u in db['users'] if u['email'].lower() == payload.email.lower()), None)
+    if existing:
+        raise HTTPException(status_code=409, detail='Account already exists for this email')
+
+    user = {
+        'name': payload.name.strip(),
+        'email': payload.email.lower(),
+        'phone': ''
+    }
+    db['users'].append({
+        **user,
+        'password': payload.password
+    })
+    _save_users_db(db)
+
+    return {
+        'token': _issue_token(user['email']),
+        'user': user,
+        'message': 'Signup successful'
+    }
+
+
+@app_api.post('/api/auth/login')
+def login(payload: LoginRequest):
+    db = _load_users_db()
+    existing = next((u for u in db['users'] if u['email'].lower() == payload.email.lower()), None)
+    if not existing or existing.get('password') != payload.password:
+        raise HTTPException(status_code=401, detail='Invalid email or password')
+
+    user = {
+        'name': existing.get('name', 'User'),
+        'email': existing['email'],
+        'phone': existing.get('phone', '')
+    }
+    return {
+        'token': _issue_token(user['email']),
+        'user': user,
+        'message': 'Login successful'
+    }
+
+
+@app_api.post('/api/auth/forgot-password')
+def forgot_password(payload: ForgotPasswordRequest):
+    db = _load_users_db()
+    existing = next((u for u in db['users'] if u['email'].lower() == payload.email.lower()), None)
+    if not existing:
+        raise HTTPException(status_code=404, detail='No account found for this email')
+
+    otp = '123456'
+    OTP_STORE[payload.email.lower()] = {
+        'otp': otp,
+        'verified': False,
+        'created_at': datetime.now().isoformat()
+    }
+
+    return {
+        'message': 'OTP sent successfully',
+        'otp_debug': otp
+    }
+
+
+@app_api.post('/api/auth/verify-otp')
+def verify_otp(payload: VerifyOtpRequest):
+    record = OTP_STORE.get(payload.email.lower())
+    if not record or record.get('otp') != payload.otp.strip():
+        raise HTTPException(status_code=400, detail='Invalid OTP')
+
+    record['verified'] = True
+    OTP_STORE[payload.email.lower()] = record
+    return {'message': 'OTP verified'}
+
+
+@app_api.post('/api/auth/reset-password')
+def reset_password(payload: ResetPasswordRequest):
+    record = OTP_STORE.get(payload.email.lower())
+    if not record or not record.get('verified'):
+        raise HTTPException(status_code=400, detail='OTP verification required')
+
+    db = _load_users_db()
+    existing = next((u for u in db['users'] if u['email'].lower() == payload.email.lower()), None)
+    if not existing:
+        raise HTTPException(status_code=404, detail='No account found for this email')
+
+    existing['password'] = payload.newPassword
+    _save_users_db(db)
+    OTP_STORE.pop(payload.email.lower(), None)
+
+    return {'message': 'Password reset successful'}
+
+
+@app_api.get('/api/route')
+def get_route(start: str, end: str, hour: Optional[int] = None):
+    app = _get_app_instance()
+    result = app.get_route_recommendation(start, end, hour)
+    if 'error' in result:
+        raise HTTPException(status_code=400, detail=result['error'])
+    return result
+
+
+@app_api.get('/api/route/alternatives')
+def get_alternative_routes(start: str, end: str, num_routes: int = 3, hour: Optional[int] = None):
+    app = _get_app_instance()
+    routes = app.get_alternative_routes(start, end, num_routes=num_routes, hour=hour)
+    if routes and isinstance(routes, list) and 'error' in routes[0]:
+        raise HTTPException(status_code=400, detail=routes[0]['error'])
+
+    enriched = []
+    for idx, route in enumerate(routes, 1):
+        route_copy = dict(route)
+        route_copy['route_name'] = f"Route {idx}"
+        route_copy['estimated_time'] = f"{(route_copy.get('distance', 1) + 1) * 7} min"
+        route_copy['distance'] = f"{route_copy.get('distance', 1) * 2.1:.1f} km"
+        enriched.append(route_copy)
+
+    return {
+        'routes': enriched,
+        'count': len(enriched)
+    }
+
+
+@app_api.get('/api/location/safety')
+def location_safety(location: str, hour: Optional[int] = None):
+    app = _get_app_instance()
+    result = app.check_location_safety(location, hour)
+    if 'error' in result:
+        raise HTTPException(status_code=404, detail=result['error'])
+    return result
+
+
+@app_api.get('/api/locations/safest')
+def safest_locations(top_n: int = 10):
+    app = _get_app_instance()
+    result = app.get_safest_locations(top_n)
+    if isinstance(result, dict) and 'error' in result:
+        raise HTTPException(status_code=400, detail=result['error'])
+
+    locations = [_location_payload(row) for row in result]
+    return {
+        'locations': locations,
+        'count': len(locations)
+    }
+
+
+@app_api.get('/api/locations/dangerous')
+def dangerous_locations(top_n: int = 10):
+    app = _get_app_instance()
+    result = app.get_dangerous_locations(top_n)
+    if isinstance(result, dict) and 'error' in result:
+        raise HTTPException(status_code=400, detail=result['error'])
+
+    locations = [_location_payload(row) for row in result]
+    return {
+        'locations': locations,
+        'count': len(locations)
+    }
+
+
+@app_api.get('/api/time-periods/safety')
+def time_period_safety():
+    app = _get_app_instance()
+    result = app.get_safest_time_periods()
+    if isinstance(result, dict) and 'error' in result:
+        raise HTTPException(status_code=400, detail=result['error'])
+
+    return {
+        'time_periods': result,
+        'count': len(result)
+    }
+
+
+@app_api.get('/api/locations/search')
+def search_locations(q: str):
+    app = _get_app_instance()
+    result = app.search_locations(q)
+    if 'error' in result:
+        return {'matches': [], 'count': 0}
+    return result
+
+
+@app_api.get('/api/location/auto-detect')
+def auto_detect_location():
+    app = _get_app_instance()
+    result = app.auto_detect_current_location()
+    if not result.get('success'):
+        raise HTTPException(status_code=400, detail=result.get('reason', 'Auto-detect failed'))
+    return result
+
+
+@app_api.get('/api/system/status')
+def system_status():
+    app = _get_app_instance()
+    return app.get_system_status()
+
+
+@app_api.get('/api/locations/suggestions')
+def location_suggestions(partial: str):
+    app = _get_app_instance()
+    matches = app.route_engine.get_location_suggestions(partial, limit=10)
+    return {'matches': matches, 'count': len(matches)}

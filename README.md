@@ -112,6 +112,29 @@ cd backend
 python main.py
 ```
 
+## Run full application (frontend + API backend)
+
+Open two terminals from project root.
+
+Terminal 1 (Backend API for frontend):
+
+```bash
+cd backend
+python -m uvicorn main:app_api --reload
+```
+
+Terminal 2 (Frontend):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open the local Vite URL shown in terminal (usually `http://localhost:5173` or `http://localhost:5174`).
+
+If port 5173 is already in use, Vite auto-switches to next available port.
+
 On startup, the system:
 1. checks/creates processed data,
 2. loads scoring and routing modules,

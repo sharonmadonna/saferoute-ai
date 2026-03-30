@@ -25,7 +25,7 @@ export const Login = ({ onLogin, onSignup, onForgot, setLoading }) => {
                 setError("Invalid credentials");
             }
         } catch (err) {
-            setError(err.response?.data?.error || "Login failed. Please try again.");
+            setError(err.response?.data?.error || err.response?.data?.detail || "Login failed. Please try again.");
         } finally {
             setLoading(false);
         }

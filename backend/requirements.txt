@@ -5,3 +5,7 @@ requests>=2.31.0
 python-dotenv>=1.0.0
 geopy>=2.3.0
 geocoder>=1.38.1
+fastapi>=0.115.0
+uvicorn>=0.30.0
+pydantic>=2.8.0
+email-validator>=2.2.0

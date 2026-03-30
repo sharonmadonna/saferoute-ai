@@ -24,7 +24,7 @@ export const ForgotPassword = ({ onBack, setLoading }) => {
             await authAPI.forgotPassword(email);
             setStep(1);
         } catch (err) {
-            alert(err.response?.data?.error || "Failed to send OTP");
+            alert(err.response?.data?.error || err.response?.data?.detail || "Failed to send OTP");
         } finally {
             setLoading(false);
         }
@@ -38,7 +38,7 @@ export const ForgotPassword = ({ onBack, setLoading }) => {
             await authAPI.verifyOTP(email, otpCode);
             setStep(2);
         } catch (err) {
-            alert("Invalid OTP. Please try again.");
+            alert(err.response?.data?.error || err.response?.data?.detail || "Invalid OTP. Please try again.");
         } finally {
             setLoading(false);
         }

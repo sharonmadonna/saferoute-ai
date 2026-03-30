@@ -29,7 +29,7 @@ export const Signup = ({ onSignup, onLogin, setLoading }) => {
                 setError("Signup failed");
             }
         } catch (err) {
-            setError(err.response?.data?.error || "Signup failed. Please try again.");
+            setError(err.response?.data?.error || err.response?.data?.detail || "Signup failed. Please try again.");
         } finally {
             setLoading(false);
         }
